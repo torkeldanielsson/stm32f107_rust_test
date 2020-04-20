@@ -1,0 +1,14 @@
+[package]
+name = "blink"
+version = "0.1.0"
+authors = ["Torkel Danielsson <torkel@voysys.se>"]
+edition = "2018"
+
+[dependencies]
+cortex-m = "0.6.2"
+panic-halt = "0.2.0"
+cortex-m-rt = "0.6.12"
+
+[dependencies.stm32f1]
+version = "0.10.0"
+features = ["stm32f107", "rt"]
