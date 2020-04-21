@@ -5,9 +5,10 @@ authors = ["Torkel Danielsson <torkel@voysys.se>"]
 edition = "2018"
 
 [dependencies]
-cortex-m = "0.6.2"
-cortex-m-rt = "0.6.12"
+stm32f1 = "0.10.0"
+cortex-m-rt = "*"
 
-[dependencies.stm32f1]
-version = "0.10.0"
-features = ["stm32f107", "rt"]
+[dependencies.stm32f1xx-hal]
+path = "../../stm32f1xx-hal"
+version = "*"
+features = ["rt", "stm32f107", "medium"]
