@@ -1,29 +1,59 @@
 #![no_std]
 #![no_main]
 
-use cortex_m_rt::entry;
-use stm32f1::stm32f107;
+use panic_halt as _;
 
-#[panic_handler]
-fn panic(_info: &core::panic::PanicInfo) -> ! {
-    loop {}
-}
+use nb::block;
+
+use cortex_m_rt::entry;
+use embedded_hal::digital::v2::OutputPin;
+use stm32f1xx_hal::{pac, prelude::*, timer::Timer};
 
 #[entry]
 fn main() -> ! {
-    let peripherals = stm32f107::Peripherals::take().unwrap();
-    let gpiod = &peripherals.GPIOD;
-    let rcc = &peripherals.RCC;
+    // Get access to the core peripherals from the cortex-m crate
+    let cp = cortex_m::Peripherals::take().unwrap();
+    // Get access to the device specific peripherals from the peripheral access crate
+    let dp = pac::Peripherals::take().unwrap();
 
-    rcc.apb2enr.write(|w| w.iopden().set_bit());
-    gpiod.crl.write(|w| 
-        w.mode0().output().cnf0().push_pull()
-    );
+    // Take ownership over the raw flash and rcc devices and convert them into the corresponding
+    // HAL structs
+    let mut flash = dp.FLASH.constrain();
+    let mut rcc = dp.RCC.constrain();
 
+    // Freeze the configuration of all the clocks in the system and store the frozen frequencies in
+    // `clocks`
+    let clocks = rcc.cfgr.freeze(&mut flash.acr);
+
+    // Acquire the GPIOD peripheral
+    let mut gpiod = dp.GPIOD.split(&mut rcc.apb2);
+
+    // Configure gpio D pin 0 as a push-pull output.
+    let mut led0 = gpiod.pd1.into_push_pull_output(&mut gpiod.crl);
+    let mut led1 = gpiod.pd0.into_push_pull_output(&mut gpiod.crl);
+    let mut led2 = gpiod.pd2.into_push_pull_output(&mut gpiod.crl);
+    // Configure the syst timer to trigger an update every second
+    // let mut timer = Timer::syst(cp.SYST, &clocks).start_count_down(1.hz());
+
+    // Wait for the timer to trigger an update and change the state of the LED
     loop {
-        gpiod.bsrr.write(|w| w.bs0().set_bit());
-        cortex_m::asm::delay(2000000);
-        gpiod.brr.write(|w| w.br0().set_bit());
-        cortex_m::asm::delay(2000000);
+        // block!(timer.wait()).unwrap();
+        cortex_m::asm::delay(1000000);
+        led0.set_low().unwrap();
+        // block!(timer.wait()).unwrap();
+        cortex_m::asm::delay(1000000);
+        led0.set_high().unwrap();
+
+        cortex_m::asm::delay(1000000);
+        led1.set_low().unwrap();
+        // block!(timer.wait()).unwrap();
+        cortex_m::asm::delay(1000000);
+        led1.set_high().unwrap();
+
+        cortex_m::asm::delay(1000000);
+        led2.set_low().unwrap();
+        // block!(timer.wait()).unwrap();
+        cortex_m::asm::delay(1000000);
+        led2.set_high().unwrap();
     }
 }
