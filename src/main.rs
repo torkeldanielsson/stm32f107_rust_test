@@ -1,13 +1,19 @@
 #![no_std]
 #![no_main]
 
-use panic_halt as _;
-
 use nb::block;
 
 use cortex_m_rt::entry;
 use embedded_hal::digital::v2::OutputPin;
 use stm32f1xx_hal::{pac, prelude::*, timer::Timer};
+
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    if let Some(location) = info.location() {
+        
+    }
+
+    loop {}
+}
 
 #[entry]
 fn main() -> ! {
@@ -33,11 +39,11 @@ fn main() -> ! {
     let mut led1 = gpiod.pd0.into_push_pull_output(&mut gpiod.crl);
     let mut led2 = gpiod.pd2.into_push_pull_output(&mut gpiod.crl);
     // Configure the syst timer to trigger an update every second
-    // let mut timer = Timer::syst(cp.SYST, &clocks).start_count_down(1.hz());
+    let mut timer = Timer::syst(cp.SYST, &clocks).start_count_down(1.hz());
 
     // Wait for the timer to trigger an update and change the state of the LED
     loop {
-        // block!(timer.wait()).unwrap();
+        block!(timer.wait()).unwrap();
         cortex_m::asm::delay(1000000);
         led0.set_low().unwrap();
         // block!(timer.wait()).unwrap();

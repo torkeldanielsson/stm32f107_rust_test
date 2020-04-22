@@ -9,12 +9,11 @@ stm32f1 = "0.10.0"
 cortex-m-rt = "*"
 cortex-m = "*"
 nb = "0.1.2"
-panic-halt = "0.2.0"
 
 [dependencies.stm32f1xx-hal]
 path = "../../stm32f1xx-hal"
 version = "*"
-features = ["rt", "stm32f107", "medium"]
+features = ["rt", "stm32f107", "connectivity"]
 
 [dependencies.embedded-hal]
 version = "0.2.3"
