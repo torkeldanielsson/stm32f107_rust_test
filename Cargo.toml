@@ -7,6 +7,7 @@ edition = "2018"
 [dependencies]
 stm32f1 = "0.10.0"
 cortex-m-rt = "*"
+cortex-m = "*"
 
 [dependencies.stm32f1xx-hal]
 path = "../../stm32f1xx-hal"
