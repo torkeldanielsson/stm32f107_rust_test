@@ -9,9 +9,7 @@ use stm32f1xx_hal::{pac, prelude::*, timer::Timer};
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    if let Some(location) = info.location() {
-        
-    }
+    if let Some(location) = info.location() {}
 
     loop {}
 }
@@ -41,28 +39,23 @@ fn main() -> ! {
     let mut led2 = gpiod.pd2.into_push_pull_output(&mut gpiod.crl);
 
     // Configure the syst timer to trigger an update every second
-    let mut timer = Timer::tim1(dp.TIM1, &clocks, &mut rcc.apb2).start_count_down(1.hz());
+    let mut timer = Timer::tim1(dp.TIM1, &clocks, &mut rcc.apb2).start_count_down(500.ms());
 
     // Wait for the timer to trigger an update and change the state of the LED
     loop {
         block!(timer.wait()).unwrap();
-
-        cortex_m::asm::delay(1000000);
         led0.set_low().unwrap();
-        // block!(timer.wait()).unwrap();
-        cortex_m::asm::delay(1000000);
+        block!(timer.wait()).unwrap();
         led0.set_high().unwrap();
 
-        cortex_m::asm::delay(1000000);
+        block!(timer.wait()).unwrap();
         led1.set_low().unwrap();
-        // block!(timer.wait()).unwrap();
-        cortex_m::asm::delay(1000000);
+        block!(timer.wait()).unwrap();
         led1.set_high().unwrap();
 
-        cortex_m::asm::delay(1000000);
+        block!(timer.wait()).unwrap();
         led2.set_low().unwrap();
-        // block!(timer.wait()).unwrap();
-        cortex_m::asm::delay(1000000);
+        block!(timer.wait()).unwrap();
         led2.set_high().unwrap();
     }
 }
