@@ -4,9 +4,9 @@
 use nb::block;
 
 use cortex_m_rt::entry;
+use cortex_m_semihosting::hprintln;
 use embedded_hal::digital::v2::OutputPin;
 use stm32f1xx_hal::{pac, prelude::*, timer::Timer};
-use cortex_m_semihosting::hprintln;
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
