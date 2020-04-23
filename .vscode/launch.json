@@ -13,7 +13,12 @@
                 "interface/stlink.cfg",
                 "target/stm32f1x.cfg"
             ],
-            "runToMain": true
+            "runToMain": true,
+            "preLaunchTask": "build_start",
+            "postLaunchCommands": [
+                "monitor arm semihosting enable",
+                "set print asm-demangle on",
+            ],
         }
     ]
 }

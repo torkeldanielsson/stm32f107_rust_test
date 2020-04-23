@@ -35,6 +35,7 @@ version = "0.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
+ "cortex-m-semihosting",
  "embedded-hal",
  "nb",
  "stm32f1",
@@ -80,6 +81,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "cortex-m-semihosting"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "113ef0ecffee2b62b58f9380f4469099b30e9f9cbee2804771b4203ba1762cfa"
+dependencies = [
+ "cortex-m",
 ]
 
 [[package]]

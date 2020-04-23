@@ -6,6 +6,7 @@ use nb::block;
 use cortex_m_rt::entry;
 use embedded_hal::digital::v2::OutputPin;
 use stm32f1xx_hal::{pac, prelude::*, timer::Timer};
+use cortex_m_semihosting::hprintln;
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
@@ -40,6 +41,8 @@ fn main() -> ! {
 
     // Configure the syst timer to trigger an update every second
     let mut timer = Timer::tim1(dp.TIM1, &clocks, &mut rcc.apb2).start_count_down(500.ms());
+
+    hprintln!("Hello, world!").unwrap();
 
     // Wait for the timer to trigger an update and change the state of the LED
     loop {
