@@ -2,9 +2,15 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "cancel_ongoing",
+            "type": "shell",
+            "command": "${workbench.action.debug.stop}",
+        },
+        {
             "label": "format",
             "type": "shell",
-            "command": "${command:editor.action.formatDocument}"
+            "command": "${command:editor.action.formatDocument}",
+            //"dependsOn": "cancel_ongoing"
         },
         {
             "label": "save_all",
@@ -14,8 +20,8 @@
         },
         {
             "label": "build",
-            "type": "cargo",
-            "subcommand": "build",
+            "type": "shell",
+            "command": "cargo build",
             "problemMatcher": [
                 "$rustc"
             ],

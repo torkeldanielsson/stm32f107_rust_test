@@ -22,7 +22,7 @@ features = ["rt", "stm32f107", "connectivity"]
 [dependencies.stm32-eth]
 path = "../stm32-eth"
 version = "*"
-features = ["stm32f107"]
+features = ["stm32f107", "dp83848"]
 
 [dependencies.embedded-hal]
 version = "0.2.3"
