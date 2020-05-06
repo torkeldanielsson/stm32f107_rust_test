@@ -26,11 +26,9 @@ static ETH_PENDING: Mutex<RefCell<bool>> = Mutex::new(RefCell::new(false));
 #[entry]
 fn main() -> ! {
     // Get access to the core peripherals from the cortex-m crate
-    let cp = cortex_m::Peripherals::take().unwrap();
+    let mut cp = cortex_m::Peripherals::take().unwrap();
     // Get access to the device specific peripherals from the peripheral access crate
     let dp = pac::Peripherals::take().unwrap();
-
-    stm32_eth::setup(&dp.RCC, &dp.AFIO);
 
     // Take ownership over the raw flash and rcc devices and convert them into the corresponding
     // HAL structs
@@ -56,6 +54,24 @@ fn main() -> ! {
         pac::rcc::cfgr::ADCPRE_A::DIV4,
         pac::rcc::cfgr::OTGFSPRE_A::DIV1_5,
     );
+
+    {
+        let rcc_raw = unsafe { &*pac::RCC::ptr() };
+
+        dp.AFIO.mapr.modify(|_, w| w.mii_rmii_sel().set_bit());
+
+        rcc_raw.ahbenr.modify(|_, w| {
+            w.ethmacen()
+                .set_bit()
+                .ethmactxen()
+                .set_bit()
+                .ethmacrxen()
+                .set_bit()
+        });
+
+        rcc_raw.ahbrstr.modify(|_, w| w.ethmacrst().set_bit());
+        rcc_raw.ahbrstr.modify(|_, w| w.ethmacrst().clear_bit());
+    }
 
     // Acquire the GPIO peripherald nicely (this also activates them, so needs to be done for all!)
     let mut _gpioa = dp.GPIOA.split(&mut rcc.apb2);
@@ -92,7 +108,7 @@ fn main() -> ! {
             let rcc_raw = unsafe { &*pac::RCC::ptr() };
 
             // MODIFY_REG(RCC->CFGR, RCC_CFGR_MCO, (RCC_MCO1SOURCE_SYSCLK))
-            rcc_raw.cfgr.modify(|_, w| w.mco().pll2());
+            rcc_raw.cfgr.modify(|_, w| w.mco().sysclk());
         }
 
         {
@@ -159,10 +175,17 @@ fn main() -> ! {
     }
     */
 
+    dp.AFIO.mapr.modify(|_, w| w.mii_rmii_sel().set_bit());
+    while !dp.AFIO.mapr.read().mii_rmii_sel().bit_is_set() {
+        dp.AFIO.mapr.modify(|_, w| w.mii_rmii_sel().set_bit());
+    }
+
     let mut rx_ring: [RingEntry<RxDescriptor>; 2] = Default::default();
     let mut tx_ring: [RingEntry<TxDescriptor>; 4] = Default::default();
     let mut eth = Eth::new(dp.ETHERNET_MAC, dp.ETHERNET_DMA, &mut rx_ring, &mut tx_ring);
     eth.enable_interrupt();
+
+    cp.NVIC.enable(Interrupt::ETH);
 
     // Wait for the timer to trigger an update and change the state of the LED
     loop {
