@@ -3,9 +3,13 @@
 
 use nb::block;
 
-use cortex_m_rt::entry;
+use core::cell::RefCell;
+use cortex_m::asm;
+use cortex_m::interrupt::Mutex;
+use cortex_m_rt::{entry, exception};
 use cortex_m_semihosting::hprintln;
 use embedded_hal::digital::v2::OutputPin;
+use stm32f1xx_hal::pac::{interrupt, Interrupt};
 use stm32f1xx_hal::{pac, prelude::*, timer::Timer};
 
 use stm32_eth::{Eth, RingEntry, RxDescriptor, TxDescriptor, TxError};
@@ -16,6 +20,8 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
 
     loop {}
 }
+
+static ETH_PENDING: Mutex<RefCell<bool>> = Mutex::new(RefCell::new(false));
 
 #[entry]
 fn main() -> ! {
@@ -52,9 +58,9 @@ fn main() -> ! {
     );
 
     // Acquire the GPIO peripherald nicely (this also activates them, so needs to be done for all!)
-    let mut gpioa = dp.GPIOA.split(&mut rcc.apb2);
-    let mut gpiob = dp.GPIOB.split(&mut rcc.apb2);
-    let mut gpioc = dp.GPIOC.split(&mut rcc.apb2);
+    let mut _gpioa = dp.GPIOA.split(&mut rcc.apb2);
+    let mut _gpiob = dp.GPIOB.split(&mut rcc.apb2);
+    let mut _gpioc = dp.GPIOC.split(&mut rcc.apb2);
     let mut gpiod = dp.GPIOD.split(&mut rcc.apb2);
 
     // Configure LED pins
@@ -155,12 +161,7 @@ fn main() -> ! {
 
     let mut rx_ring: [RingEntry<RxDescriptor>; 2] = Default::default();
     let mut tx_ring: [RingEntry<TxDescriptor>; 4] = Default::default();
-    let mut eth = Eth::new(
-        dp.ETHERNET_MAC,
-        dp.ETHERNET_DMA,
-        &mut rx_ring[..],
-        &mut tx_ring[..],
-    );
+    let mut eth = Eth::new(dp.ETHERNET_MAC, dp.ETHERNET_DMA, &mut rx_ring, &mut tx_ring);
     eth.enable_interrupt();
 
     // Wait for the timer to trigger an update and change the state of the LED
@@ -169,30 +170,32 @@ fn main() -> ! {
 
         block!(timer.wait()).unwrap();
         if status.remote_fault() {
-            led0.set_low().unwrap();
-        }
-        block!(timer.wait()).unwrap();
-        led0.set_high().unwrap();
-
-        block!(timer.wait()).unwrap();
-        if status.link_detected() {
             led1.set_low().unwrap();
         }
         block!(timer.wait()).unwrap();
         led1.set_high().unwrap();
 
         block!(timer.wait()).unwrap();
+        if status.link_detected() {
+            led0.set_low().unwrap();
+        }
+        block!(timer.wait()).unwrap();
+        led0.set_high().unwrap();
+
+        block!(timer.wait()).unwrap();
 
         if status.link_detected() {
             const SRC_MAC: [u8; 6] = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
-            const DST_MAC: [u8; 6] = [0x00, 0xE0, 0x4D, 0x68, 0xFF, 0xA5];
-            const ETH_TYPE: [u8; 2] = [0x80, 0x00];
-            const SIZE: usize = 80;
+            const DST_MAC: [u8; 6] = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
+            const ETH_TYPE: [u8; 2] = [0x00, 0x00];
+            const RANDOM: [u8; 6] = [0x01, 0x01, 0x01, 0x01, 0x01, 0x01];
+            const SIZE: usize = 20;
 
             let tx_res = eth.send(SIZE, |buf| {
                 buf[0..6].copy_from_slice(&DST_MAC);
                 buf[6..12].copy_from_slice(&SRC_MAC);
                 buf[12..14].copy_from_slice(&ETH_TYPE);
+                buf[14..20].copy_from_slice(&RANDOM);
             });
 
             match tx_res {
@@ -200,7 +203,20 @@ fn main() -> ! {
                 Err(TxError::WouldBlock) => led2.set_low().unwrap(),
             }
         }
+
         block!(timer.wait()).unwrap();
         led2.set_high().unwrap();
     }
+}
+
+#[interrupt]
+fn ETH() {
+    cortex_m::interrupt::free(|cs| {
+        let mut eth_pending = ETH_PENDING.borrow(cs).borrow_mut();
+        *eth_pending = true;
+    });
+
+    // Clear interrupt flags
+    let p = unsafe { pac::Peripherals::steal() };
+    stm32_eth::eth_interrupt_handler(&p.ETHERNET_DMA);
 }
