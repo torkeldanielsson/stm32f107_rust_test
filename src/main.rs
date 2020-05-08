@@ -174,17 +174,51 @@ fn main() -> ! {
         block!(timer.wait()).unwrap();
 
         if status.link_detected() {
+            // MAC layer pads up to 60, so we can just as well use that
+            const SIZE: usize = 60;
+
             const SRC_MAC: [u8; 6] = [0x56, 0x4f, 0x59, 0x53, 0x59, 0x53];
             const DST_MAC: [u8; 6] = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
-            const ETH_TYPE: [u8; 2] = [0x08, 0x00];
-            const RANDOM: [u8; 6] = [0x45, 0x00, 0x00, 0x14, 0x1d, 0xc3];
-            const SIZE: usize = 20;
+            const ETH_TYPE: [u8; 2] = [0x08, 0x00]; // IPv4
+
+            let mut ip: [u8; 20] = [0x00; 20];
+            ip[0] = 0x45; // Version 4, header length 20
+            ip[1] = 0x00; // No "differentiated services"
+            ip[2] = 0x00; // Total length, high byte
+            ip[3] = 46; // Total length, low byte
+            ip[4] = 0x10; // Identification, high byte
+            ip[5] = 0x01; // Identification, low byte
+            ip[6] = 0x00; // Flags
+            ip[7] = 0x00; // Fragment offset
+            ip[8] = 0xFF; // TTL
+            ip[9] = 0x11; // Protocol (UDP)
+            ip[10] = 0x00; // Header checksum, high byte (disabled)
+            ip[11] = 0x00; // Header checksum, low byte (disabled)
+            ip[12] = 192; // Source IP
+            ip[13] = 168; // Source IP
+            ip[14] = 1; // Source IP
+            ip[15] = 123; // Source IP
+            ip[16] = 255; // Destination IP
+            ip[17] = 255; // Destination IP
+            ip[18] = 255; // Destination IP
+            ip[19] = 255; // Destination IP
+
+            let mut udp: [u8; 26] = [0x00; 26];
+            udp[0] = 0x56; // Source port, high byte
+            udp[1] = 0x53; // Source port, low byte
+            udp[2] = 0x56; // Destination port, high byte
+            udp[3] = 0x53; // Destination port, low byte
+            udp[4] = 0x00; // Length, high byte
+            udp[5] = 26; // Length, low byte
+            udp[6] = 0x00; // Checksum, high byte
+            udp[7] = 0x00; // Checksum, low byte
 
             let tx_res = eth.send(SIZE, |buf| {
                 buf[0..6].copy_from_slice(&DST_MAC);
                 buf[6..12].copy_from_slice(&SRC_MAC);
                 buf[12..14].copy_from_slice(&ETH_TYPE);
-                buf[14..20].copy_from_slice(&RANDOM);
+                buf[14..34].copy_from_slice(&ip);
+                buf[34..60].copy_from_slice(&udp);
             });
 
             match tx_res {
