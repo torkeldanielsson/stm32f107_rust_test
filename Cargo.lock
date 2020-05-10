@@ -37,6 +37,7 @@ dependencies = [
  "cortex-m-rt",
  "cortex-m-semihosting",
  "embedded-hal",
+ "micromath",
  "nb",
  "stm32-eth",
  "stm32f1",
@@ -122,6 +123,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "micromath"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c61d2b2dd22f6e15164f8ae1b6cec2028662c57e210c5809328bd065f92eba13"
+
+[[package]]
 name = "nb"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -193,7 +200,7 @@ dependencies = [
 
 [[package]]
 name = "stm32f1"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "bare-metal",
  "cortex-m",
