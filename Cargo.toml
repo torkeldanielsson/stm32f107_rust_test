@@ -10,6 +10,7 @@ cortex-m = "*"
 nb = "0.1.2"
 cortex-m-semihosting = "0.3.3"
 micromath = "1.0.0"
+aligned = "0.3"
 
 [dependencies.stm32f1]
 path = "../stm32-rs/stm32f1"

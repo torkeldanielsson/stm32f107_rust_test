@@ -33,6 +33,7 @@ dependencies = [
 name = "blink"
 version = "0.1.0"
 dependencies = [
+ "aligned",
  "cortex-m",
  "cortex-m-rt",
  "cortex-m-semihosting",
