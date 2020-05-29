@@ -6,10 +6,9 @@ use nb::block;
 use core::cell::RefCell;
 use cortex_m::interrupt::Mutex;
 use cortex_m_rt::entry;
-use cortex_m_semihosting::hprintln;
 use embedded_hal::digital::v2::OutputPin;
 use stm32f1xx_hal::pac::interrupt;
-use stm32f1xx_hal::stm32::{Interrupt, NVIC};
+use stm32f1xx_hal::stm32::Interrupt;
 use stm32f1xx_hal::{pac, prelude::*, timer::Timer};
 
 use stm32_eth::{Eth, RingEntry, RxDescriptor, TxDescriptor, TxError};
@@ -26,15 +25,14 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 
 static ETH_PENDING: Mutex<RefCell<bool>> = Mutex::new(RefCell::new(false));
 
-const I2S_DMA_LENGTH: usize = 512;
-static mut I2S_DMA_BUFFER_1: Aligned<A4, [u8; I2S_DMA_LENGTH]> = Aligned([0x00; I2S_DMA_LENGTH]);
-static mut I2S_DMA_BUFFER_2: Aligned<A4, [u8; I2S_DMA_LENGTH]> = Aligned([0x00; I2S_DMA_LENGTH]);
-
-static I2S_USING_BUFFER_1: Mutex<RefCell<bool>> = Mutex::new(RefCell::new(true));
+const I2S_DMA_LENGTH: usize = 1024;
+static mut I2S_DMA_BUFFER: Aligned<A4, [u8; I2S_DMA_LENGTH]> = Aligned([0x00; I2S_DMA_LENGTH]);
+static I2S_DMA_TO_LOWER_BUFFER: Mutex<RefCell<bool>> = Mutex::new(RefCell::new(true));
 static I2S_DATA_AVAILABLE: Mutex<RefCell<bool>> = Mutex::new(RefCell::new(false));
 
 #[entry]
 fn main() -> ! {
+    let cp = cortex_m::peripheral::Peripherals::take().unwrap();
     let dp = pac::Peripherals::take().unwrap();
 
     stm32_eth::setup(&dp.RCC, &dp.AFIO);
@@ -74,9 +72,6 @@ fn main() -> ! {
     led_red.set_high().unwrap();
 
     let mut timer = Timer::tim1(dp.TIM1, &clocks, &mut rcc.apb2).start_count_down(50.ms());
-
-    // N.B. Semi-hosting makes it so the code will not run without debugger attached to the mcu!
-    // hprintln!("Hello, world!").unwrap();
 
     {
         // Configure Ethernet pins
@@ -137,13 +132,24 @@ fn main() -> ! {
         });
     }
 
-    // Ethernet setup is broken, we need to reselect RMII here
+    // Ethernet setup is broken... we need to reselect RMII here
     dp.AFIO.mapr.modify(|_, w| w.mii_rmii_sel().set_bit());
 
     let mut rx_ring: [RingEntry<RxDescriptor>; 2] = Default::default();
     let mut tx_ring: [RingEntry<TxDescriptor>; 4] = Default::default();
     let mut eth = Eth::new(dp.ETHERNET_MAC, dp.ETHERNET_DMA, &mut rx_ring, &mut tx_ring);
     eth.enable_interrupt();
+
+    let mut nvic = cp.NVIC;
+
+    {
+        // Set priority for ethernet interrupt
+        unsafe {
+            nvic.set_priority(Interrupt::ETH, 0x7F);
+            cortex_m::peripheral::NVIC::unmask(Interrupt::DMA2_CHANNEL1);
+        }
+        cortex_m::peripheral::NVIC::unpend(Interrupt::DMA2_CHANNEL1);
+    }
 
     {
         // Configure I2S (I2S3 uses almost same hw as SPI3)
@@ -182,9 +188,13 @@ fn main() -> ! {
                 .enabled()
                 .teie()
                 .enabled()
+                .htie()
+                .enabled()
+                .circ()
+                .enabled()
         });
 
-        let i2s_dma_memory_address = unsafe { I2S_DMA_BUFFER_1.as_ptr() } as usize as u32;
+        let i2s_dma_memory_address = unsafe { I2S_DMA_BUFFER.as_ptr() } as usize as u32;
         dma2.ch1.mar.write(|w| w.ma().bits(i2s_dma_memory_address));
 
         // Hard coded address for stm32f107!
@@ -196,13 +206,11 @@ fn main() -> ! {
             .write(|w| w.ndt().bits((I2S_DMA_LENGTH / 2) as u16));
 
         {
-            // Turn on interrupt
-
-            let interrupt = Interrupt::DMA2_CHANNEL1;
-
             unsafe {
-                NVIC::unmask(interrupt);
+                nvic.set_priority(Interrupt::TIM2, 0x00);
+                cortex_m::peripheral::NVIC::unmask(Interrupt::TIM2);
             }
+            cortex_m::peripheral::NVIC::unpend(Interrupt::TIM2);
         }
 
         // Enable DMA, and wait for it to be enabled
@@ -317,7 +325,7 @@ fn main() -> ! {
     ip_header[16] = 192; // Destination IP
     ip_header[17] = 168; // Destination IP
     ip_header[18] = 1; // Destination IP
-    ip_header[19] = 15; // Destination IP - broadcast
+    ip_header[19] = 3; // Destination IP - broadcast
 
     let udp_length: u16 = ip_length - 20;
 
@@ -348,24 +356,21 @@ fn main() -> ! {
         if eth_phy_status.link_detected() {
             let mut data_available = false;
             cortex_m::interrupt::free(|cs| {
-                let mut internal_data_available = I2S_DATA_AVAILABLE.borrow(cs).borrow_mut();
-                data_available = *internal_data_available;
-                *internal_data_available = false;
+                let mut data_available_loan = I2S_DATA_AVAILABLE.borrow(cs).borrow_mut();
+                data_available = *data_available_loan;
+                *data_available_loan = false;
             });
 
             if data_available {
-                let mut using_buffer_1 = false;
-                cortex_m::interrupt::free(|cs| {
-                    let internal_using_buffer_1 = I2S_USING_BUFFER_1.borrow(cs).borrow();
-                    using_buffer_1 = *internal_using_buffer_1;
+                let dma_to_lower = cortex_m::interrupt::free(|cs| unsafe {
+                    *I2S_DMA_TO_LOWER_BUFFER.borrow(cs).as_ptr()
                 });
 
-                let mut payload = unsafe { &I2S_DMA_BUFFER_1 };
-
-                if using_buffer_1 {
-                    // "using_buffer_1" means the DMA has it, so _2 is free:
-                    payload = unsafe { &I2S_DMA_BUFFER_2 };
-                }
+                let payload = if dma_to_lower {
+                    unsafe { &I2S_DMA_BUFFER[512..1024] }
+                } else {
+                    unsafe { &I2S_DMA_BUFFER[0..512] }
+                };
 
                 let tx_res = eth.send(SIZE, |buf| {
                     buf[0..6].copy_from_slice(&DST_MAC);
@@ -407,57 +412,34 @@ fn ETH() {
 
 #[interrupt]
 fn DMA2_CHANNEL1() {
-    let dma2_raw = unsafe { &*pac::DMA2::ptr() };
+    let gpiod_raw = unsafe { &*stm32f1::stm32f107::GPIOD::ptr() };
+    gpiod_raw.bsrr.write(|w| w.br0().set_bit());
 
-    {
-        // Toggle I2S DMA Buffers
+    let dma2_raw = unsafe { &*stm32f1::stm32f107::DMA2::ptr() };
 
-        // Disable DMA before reconfiguring it
-        dma2_raw.ch1.cr.modify(|_, w| w.en().disabled());
+    let half_transfer_complete = dma2_raw.isr.read().htif1().is_half();
 
-        let mut using_buffer_1 = false;
-        cortex_m::interrupt::free(|cs| {
-            let mut internal_using_buffer_1 = I2S_USING_BUFFER_1.borrow(cs).borrow_mut();
-            if *internal_using_buffer_1 {
-                using_buffer_1 = false;
-                *internal_using_buffer_1 = false;
-            } else {
-                using_buffer_1 = true;
-                *internal_using_buffer_1 = true;
-            }
-        });
+    // Clear all channel 1 interrupt flags
+    dma2_raw.ifcr.write(|w| {
+        w.cgif1()
+            .set_bit()
+            .cteif1()
+            .set_bit()
+            .ctcif1()
+            .set_bit()
+            .chtif1()
+            .set_bit()
+    });
 
-        if using_buffer_1 {
-            let i2s_dma_memory_address = unsafe { I2S_DMA_BUFFER_1.as_ptr() } as usize as u32;
-            dma2_raw
-                .ch1
-                .mar
-                .write(|w| w.ma().bits(i2s_dma_memory_address));
-        } else {
-            let i2s_dma_memory_address = unsafe { I2S_DMA_BUFFER_2.as_ptr() } as usize as u32;
-            dma2_raw
-                .ch1
-                .mar
-                .write(|w| w.ma().bits(i2s_dma_memory_address));
-        }
-
-        // Beware - memory is in bytes, so we divide by two...
-        dma2_raw
-            .ch1
-            .ndtr
-            .write(|w| w.ndt().bits((I2S_DMA_LENGTH / 2) as u16));
-
-        // Enable DMA again
-        dma2_raw.ch1.cr.modify(|_, w| w.en().enabled());
-    }
+    cortex_m::interrupt::free(|cs| {
+        let mut dma_to_lower = I2S_DMA_TO_LOWER_BUFFER.borrow(cs).borrow_mut();
+        *dma_to_lower = !half_transfer_complete;
+    });
 
     cortex_m::interrupt::free(|cs| {
         let mut data_available = I2S_DATA_AVAILABLE.borrow(cs).borrow_mut();
         *data_available = true;
     });
 
-    // Clear interrupt flags
-    dma2_raw
-        .ifcr
-        .write(|w| w.cgif1().set_bit().cteif1().set_bit().ctcif1().set_bit());
+    gpiod_raw.bsrr.write(|w| w.bs0().set_bit());
 }

@@ -1,5 +1,5 @@
 [package]
-name = "blink"
+name = "audio_thing"
 version = "0.1.0"
 authors = ["Torkel Danielsson <torkel@voysys.se>"]
 edition = "2018"
@@ -8,13 +8,11 @@ edition = "2018"
 cortex-m-rt = "*"
 cortex-m = "*"
 nb = "0.1.2"
-cortex-m-semihosting = "0.3.3"
 micromath = "1.0.0"
 aligned = "0.3"
 
 [dependencies.stm32f1]
-path = "../stm32-rs/stm32f1"
-version = "*"
+git = "https://github.com/stm32-rs/stm32-rs-nightlies"
 
 [dependencies.stm32f1xx-hal]
 path = "../stm32f1xx-hal"

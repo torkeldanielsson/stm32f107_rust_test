@@ -4,19 +4,21 @@
         {
             "type": "cortex-debug",
             "request": "launch",
-            "servertype": "openocd",
+            "servertype": "bmp", // openocd bmp
+            "BMPGDBSerialPort": "COM4",
             "cwd": "${workspaceRoot}",
-            "executable": "./target/thumbv7m-none-eabi/debug/blink",
+            "executable": "./target/thumbv7m-none-eabi/debug/audio_thing",
             "name": "Debug (OpenOCD)",
             "device": "STM32F107VCT6",
             "configFiles": [
                 "interface/stlink.cfg",
                 "target/stm32f1x.cfg"
             ],
+            "svdFile": "stm32f107.svd.patched",
             "runToMain": true,
+            "interface": "swd",
             "preLaunchTask": "build_start",
             "postLaunchCommands": [
-                "monitor arm semihosting enable",
                 "set print asm-demangle on",
             ],
         }
